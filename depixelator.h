@@ -1,0 +1,402 @@
+/*
+    Copyright (c) 2018, reMarkable AS <technology@remarkable.no>
+    Copyright (c) 2018, Gunnar Sletta <gunnar@crimson.no>
+    All rights reserved.
+
+    Redistribution and use in source and binary forms, with or without
+    modification, are permitted provided that the following conditions are met:
+
+    1. Redistributions of source code must retain the above copyright notice, this
+       list of conditions and the following disclaimer.
+    2. Redistributions in binary form must reproduce the above copyright notice,
+       this list of conditions and the following disclaimer in the documentation
+       and/or other materials provided with the distribution.
+
+    THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+    ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+    DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+    ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+    LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+    ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+    (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+    SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/
+
+#pragma once
+
+#include <vector>
+#include <unordered_map>
+#include <cmath>
+
+namespace depixelator {
+
+struct Point
+{
+    float x;
+    float y;
+
+    Point(float x = 0.0f, float y = 0.0f) : x(x), y(y) { }
+};
+
+struct IntPoint
+{
+    int x;
+    int y;
+
+    IntPoint(int x = 0, int y = 0.0f) : x(x), y(y) { }
+};
+
+struct Bitmap
+{
+    unsigned char *data = nullptr;
+    unsigned int width = 0;
+    unsigned int height = 0;
+    unsigned int stride = 0;
+
+    //
+    // Returns true if the bitmap is valid...
+    //
+    bool isValid() const;
+
+    //
+    // Returns true if the bit at x, y is set.
+    // Will assert on invalid values of x and y.
+    //
+    bool checkBit(int x, int y) const;
+};
+
+typedef std::vector<Point> Polyline;
+
+/*
+ * Runs a Marching Squares algorithm over the bitmap and forms polylines out of the result.
+ *
+ * The polylines are merged into closed polylines.
+ */
+std::vector<Polyline> findContours(const Bitmap &bitmap);
+
+/*
+ * Runs over the given polyline and returns a visually identical copy, but with superfluous
+ * points removed.
+ */
+Polyline simplifyPolyline(const Polyline &polyline, float threshold);
+
+/*
+ * Runs over the points and nudges them to form a slightly less ragged polyline..
+ */
+Polyline smoothenPolyline(const Polyline &polyline, float factor);
+
+Polyline smoothenPolyline(const Polyline &polyline, float factor, int iterations);
+
+/*
+ * Turn tne polyline into a continuous cubic bezier path.
+ *
+
+ * First point is to be considered the 'MoveTo' element, following it will be
+ * groups of three and three points, where each group of three should be
+ * interpreted like this:
+ *  - 0: control point 1
+ *  - 1: control point 2
+ *  - 2: end point
+ */
+Polyline convertToCubicPath(const Polyline &polyline);
+
+} // end of namespace
+
+namespace std
+{
+    template<> struct hash<depixelator::IntPoint> {
+        size_t operator()(const depixelator::IntPoint &p) const { return (p.x << 4) + p.y; }
+    };
+    template<> struct equal_to<depixelator::IntPoint> {
+        bool operator()(const depixelator::IntPoint &a, const depixelator::IntPoint &b) const { return a.x == b.x && a.y == b.y; }
+    };
+}
+
+namespace depixelator {
+
+//
+// ****************************** Implementation ******************************
+//
+
+inline bool Bitmap::isValid() const
+{
+    return data != nullptr
+           && width > 0
+           && height > 0
+           && stride > 0;
+}
+
+inline bool Bitmap::checkBit(int x, int y) const
+{
+    assert(isValid());
+    if (x < 0 || y < 0  || x >= (int) width || y >= (int) height) {
+        return false;
+    }
+    return (data[y * stride + (x >> 3)] & (1<<(x&7))) != 0;
+}
+
+inline std::vector<Polyline> findContours(const Bitmap &bitmap)
+{
+    if (!bitmap.isValid())
+        return std::vector<Polyline>();
+
+    int xsteps = bitmap.width - 1;
+    int ysteps = bitmap.height - 1;
+
+    const unsigned int lineCount[16] = {
+        0, 1, 1, 1,
+        1, 2, 1, 1,
+        1, 1, 2, 1,
+        1, 1, 1, 0
+    };
+
+    // We want absolute equallity between points, so we're using integers * 10...
+    const int precision = 10;
+    const int a = precision / 2;    // 0.5
+    const int b = precision;        // 1.0
+    const int c = a + b;            // 1.5
+
+    const int lines[][16] = {
+        /* 0x0 */   { },
+        /* 0x1 */   { b, a,   a, b },
+        /* 0xb */   { c, b,   b, a },
+        /* 0xc */   { c, b,   a, b },
+
+        /* 0x4 */   { b, c,   c, b },
+        /* 0x5 */   { b, a,   c, b,     b, c, a, b },
+        /* 0x6 */   { b, c,   b, a },
+        /* 0x7 */   { b, c,   a, b },
+
+        /* 0x8 */   { a, b,   b, c },
+        /* 0x9 */   { b, a,   b, c },
+        /* 0xa */   { a, b,   b, a,     c, b, b, c },
+        /* 0xb */   { c, b,   b, c },
+        /* 0xc */   { a, b,   c, b },
+        /* 0xd */   { b, a,   c, b },
+        /* 0xe */   { a, b,   b, a },
+        /* 0xf */   { }
+    };
+
+    // The algorithm guarantees a single line segment per point value, so
+    // using a map is perfectly fine and helps us below, so we do that.
+    std::unordered_map<IntPoint, IntPoint> segments;
+
+    for (int y=-1; y<=ysteps; ++y) {
+        for (int x=-1; x<=xsteps; ++x) {
+            unsigned int mask = ((unsigned int) bitmap.checkBit(x  , y  ) << 0)
+                              | ((unsigned int) bitmap.checkBit(x+1, y  ) << 1)
+                              | ((unsigned int) bitmap.checkBit(x+1, y+1) << 2)
+                              | ((unsigned int) bitmap.checkBit(x  , y+1) << 3);
+
+
+            for (unsigned char i=0; i<lineCount[mask]; ++i) {
+                const int *l = lines[mask] + i * 4;
+                int xp = x * precision;
+                int yp = y * precision;
+                segments[IntPoint(xp+l[0], yp+l[1])] = IntPoint(xp+l[2], yp+l[3]);
+            }
+
+        }
+    }
+
+    // Here endeth the marching square algorithm. At this point, we have all
+    // line segments stored in 'segments' and we will traverse the unordered map
+    // merging them into polylines until the map is empty.
+    //
+    // Since we went outside the bitmap, where the bit is guaranteed to be
+    // unset, the segments are guaranteed to form closed polylines and as a
+    // result we can form the polylines by starting on any given segment and
+    // just following the line, segment by segment, until we're back where we
+    // started. We remove each segment as we traverse it, so when we reach the
+    // beginning we'll get fail to find another match for our point and the
+    // poly line is complete.
+    //
+    // Then onto the next one, etc..
+
+    const float invprec = 1.0f / precision;
+
+    std::vector<Polyline> polylines;
+    Polyline polyline;
+
+    while (segments.size()) {
+
+        auto it = segments.begin();
+        IntPoint a = it->first;
+        IntPoint b = it->second;
+        polyline.push_back(Point(a.x * invprec, a.y * invprec));
+        polyline.push_back(Point(b.x * invprec, b.y * invprec));
+        segments.erase(it);
+        it = segments.find(b);
+
+        // append to the end of the line
+        while (it != segments.end()) {
+            b = it->second;
+            polyline.push_back(Point(b.x * invprec, b.y * invprec));
+            segments.erase(it);
+            it = segments.find(b);
+        }
+        polylines.push_back(polyline);
+        polyline.clear();
+    }
+    return polylines;
+}
+
+Polyline simplifyPolyline(const Polyline &polyline, float threshold)
+{
+    if (polyline.size() < 2) {
+        return polyline;
+    }
+
+    Polyline result;
+    result.reserve(polyline.size() / 10);
+
+    auto it = polyline.begin();
+    float lx = it->x;
+    float ly = it->y;
+    float ldx = 0;
+    float ldy = 0;
+
+    result.push_back(*it);
+    ++it;
+
+    while (it != polyline.end()) {
+        float dx = it->x - lx;
+        float dy = it->y - ly;
+
+        if (dy != 0 && ldy != 0) {
+            // If there is a non-trivial difference in slope, add the point..
+            float ls = ldx / ldy;
+            float s = dx / dy;
+            if (std::abs(ls - s) > threshold) {
+                result.push_back(*it);
+            } else {
+                result.back() = *it;
+            }
+
+        } else if (ldy == 0 && dy == 0) {
+            // line is horizontal, add if direction is opposite, though given
+            // where the lines are coming from this situation will never arise
+            // in practice, so this is more for algorithmic integrity.. We could
+            // technically skip it..
+            if (ldx * dx < 0) {
+               result.push_back(*it);
+            } else {
+                result.back() = *it;
+            }
+
+        } else {
+            // There are differences, add the point..
+            result.push_back(*it);
+        }
+
+        lx = it->x;
+        ly = it->y;
+        ldx = dx;
+        ldy = dy;
+
+        ++it;
+    }
+
+    return result;
+}
+
+Polyline smoothenPolyline(const Polyline &polyline, float factor)
+{
+    if (polyline.size() < 4) {
+        return polyline;
+    }
+
+    Polyline result;
+
+    for (unsigned int i=0; i<polyline.size(); ++i) {
+        Point cur = polyline[i];
+        Point last = i == 0 ? polyline[polyline.size() - 2] : polyline[i-1];
+        Point next = i == polyline.size() - 1 ? polyline[1] : polyline[i+1];
+
+        float ax = cur.x - last.x;
+        float ay = cur.y - last.y;
+        float bx = next.x - cur.x;
+        float by = next.y - cur.y;
+        float lena = std::sqrt(ax * ax + ay * ay);
+        float lenb = std::sqrt(bx * bx + by * by);
+
+        float t = lena / (lena + lenb);
+        float it = 1.0f - t;
+
+        float px = it * it * last.x + 2 * it * t * cur.x + t * t * next.x;
+        float py = it * it * last.y + 2 * it * t * cur.y + t * t * next.y;
+
+        float ifactor = 1.0f - factor;
+
+        result.push_back(Point(px * factor + cur.x * ifactor,
+                               py * factor + cur.y * ifactor));
+    }
+
+    if (result.front().x != result.back().x
+        || result.front().y != result.back().y) {
+        result.push_back(result.front());
+    }
+
+    return result;
+}
+
+Polyline smoothenPolyline(const Polyline &polyline, float factor, int iterations)
+{
+    if (iterations < 1) {
+        return polyline;
+    }
+
+    Polyline result = smoothenPolyline(polyline, factor);
+    for (int i=1; i<iterations; ++i) {
+        result = smoothenPolyline(result, factor);
+    }
+
+    return result;
+}
+
+Polyline convertToCubicPath(const Polyline &polyline)
+{
+    if (polyline.size() < 4) {
+        return polyline;
+    }
+
+    Polyline result;
+
+    for (unsigned int i=0; i<polyline.size(); ++i) {
+        Point cur = polyline[i];
+        Point last = i == 0 ? polyline[polyline.size() - 2] : polyline[i-1];
+        Point next = i == polyline.size() - 1 ? polyline[1] : polyline[i+1];
+
+        // Form a tangent line based on the line last->next
+        float tx = next.x - last.x;
+        float ty = next.y - last.y;
+        float tlen = std::sqrt(tx * tx + ty * ty);
+        tx /= tlen;
+        ty /= tlen;
+
+        if (i > 0) {
+            // Weight the tangent line based on the distance from 'last' to 'cur'
+            float dx = cur.x - last.x;
+            float dy = cur.y - last.y;
+            float len = std::sqrt(dx * dx + dy * dy) / 3;
+            result.push_back(Point(cur.x - tx * len, cur.y - ty * len));
+        }
+
+        result.push_back(cur);
+
+        if (i < polyline.size() - 1) {
+            // Weight the tangent line based on the distance from 'cur' to 'next'
+            float dx = next.x - cur.x;
+            float dy = next.y - cur.y;
+            float len = std::sqrt(dx * dx + dy * dy) / 3;
+            result.push_back(Point(cur.x + tx * len, cur.y + ty * len));
+        }
+    }
+
+    return result;
+}
+
+} // end of namespace depixelator
+
