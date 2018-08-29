@@ -26,6 +26,7 @@
 
 #pragma once
 
+#include <assert.h>
 #include <vector>
 #include <unordered_map>
 #include <cmath>
@@ -68,34 +69,41 @@ struct Bitmap
 };
 
 typedef std::vector<Point> Polyline;
+typedef std::vector<Polyline> Polylines;
 
 /*
  * Runs a Marching Squares algorithm over the bitmap and forms polylines out of the result.
  *
  * The polylines are merged into closed polylines.
  */
-std::vector<Polyline> findContours(const Bitmap &bitmap);
+Polylines findContours(const Bitmap &bitmap);
 
 /*
  * Runs over the given polyline and returns a visually identical copy, but with superfluous
  * points removed.
  */
 Polyline simplify(const Polyline &polyline, float threshold);
+Polylines simplify(const Polylines &lines, float threshold);
 
 /*
  * Performs a Ramer-Douglas-Peuker end-point fit algorithm.
  */
 Polyline simplifyRDP(const Polyline &polyline, float epsilon);
+Polylines simplifyRDP(const Polylines &lines, float epsilon);
 
-
+/*
+ * Trace pixel-wise slopes in the lines and recreates the desired slopes
+ */
 Polyline traceSlopes(const Polyline &polyline);
+Polylines traceSlopes(const Polylines &polyline);
+
 
 /*
  * Runs over the points and nudges them to form a slightly less ragged polyline..
  */
 Polyline smoothen(const Polyline &polyline, float factor);
-
 Polyline smoothen(const Polyline &polyline, float factor, int iterations);
+Polylines smoothen(const Polylines &lines, float factor, int iterations);
 
 /*
  * Turn tne polyline into a continuous cubic bezier path.
@@ -109,6 +117,7 @@ Polyline smoothen(const Polyline &polyline, float factor, int iterations);
  *  - 2: end point
  */
 Polyline convertToCubicPath(const Polyline &polyline);
+Polylines convertToCubicPaths(const Polylines &lines);
 
 } // end of namespace
 
@@ -145,10 +154,10 @@ inline bool Bitmap::checkBit(int x, int y) const
     return (data[y * stride + (x >> 3)] & (1<<(x&7))) != 0;
 }
 
-inline std::vector<Polyline> findContours(const Bitmap &bitmap)
+inline Polylines findContours(const Bitmap &bitmap)
 {
     if (!bitmap.isValid())
-        return std::vector<Polyline>();
+        return Polylines();
 
     int xsteps = bitmap.width - 1;
     int ysteps = bitmap.height - 1;
@@ -225,7 +234,7 @@ inline std::vector<Polyline> findContours(const Bitmap &bitmap)
 
     const float invprec = 1.0f / precision;
 
-    std::vector<Polyline> polylines;
+    Polylines polylines;
     Polyline polyline;
 
     while (segments.size()) {
@@ -539,6 +548,42 @@ inline Polyline traceSlopes(const Polyline &polyline)
     }
 
     return result;
+}
+
+inline Polylines smoothen(const Polylines &lines, float factor, int iterations)
+{
+    Polylines out;
+    for (auto in : lines) {
+        out.push_back(smoothen(in, factor, iterations));
+    }
+    return out;
+}
+
+inline Polylines convertToCubicPaths(const Polylines &lines)
+{
+    Polylines out;
+    for (auto in : lines) {
+        out.push_back(convertToCubicPath(in));
+    }
+    return out;
+}
+
+inline Polylines simplify(const Polylines &lines, float threshold)
+{
+    Polylines out;
+    for (auto in : lines) {
+        out.push_back(simplify(in, threshold));
+    }
+    return out;
+}
+
+inline Polylines simplifyRDP(const Polylines &lines, float threshold)
+{
+    Polylines out;
+    for (auto in : lines) {
+        out.push_back(simplifyRDP(in, threshold));
+    }
+    return out;
 }
 
 } // end of namespace depixelator
