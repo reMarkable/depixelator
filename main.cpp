@@ -29,6 +29,8 @@ static void printHelp(char *app)
     qDebug("     --smooth-before-reduce Run smoothing before reduction..");
     qDebug("     --smooth [fac]? [it]?  Run smoothing of points, [fac] is the factor, 0->1, [it] is number of iterations");
     qDebug();
+    qDebug("     --trace-slopes         Run a slope finding algorithm over the line to recreate sloped lines");
+    qDebug();
     qDebug("     --cubic-beziers        Turn into a continuous series of cubic beziers, perfect for path rendering..");
     qDebug();
     qDebug(" -h  --help         Print this help...");
@@ -149,6 +151,8 @@ int main(int argc, char **argv)
     int smoothIterations = 0;
     float smoothFactor = 0.0f;
 
+    bool processTraceSlopes = false;
+
     bool processBezier = false;
 
     for (int i=1; i<argc; ++i) {
@@ -173,6 +177,8 @@ int main(int argc, char **argv)
             renderStroke = true;
         } else if (arg == QStringLiteral("--cubic-beziers")) {
             processBezier = true;
+        } else if (arg == QStringLiteral("--trace-slopes")) {
+            processTraceSlopes = true;
         } else if (arg == QStringLiteral("--smooth-before-reduce")) {
             processSmoothBeforeReduce = true;
         } else if (arg == QStringLiteral("--reduce")) {
@@ -263,6 +269,7 @@ int main(int argc, char **argv)
     qDebug(" --reduce ................: %s, threshold=%f", processReduce ? "yes" : "no", reduceThreshold);
     qDebug(" --smooth ................: %s, factor=%f, iterations=%d", processSmooth ? "yes" : "no", smoothFactor, smoothIterations);
     qDebug(" --smooth-before-reduce ..: %s", processSmoothBeforeReduce ? "yes" : "no");
+    qDebug(" --trace-slopes ..........: %s", processTraceSlopes ? "yes" : "no");
     qDebug(" --cubic-beziers .........: %s", processBezier ? "yes" : "no");
 
     QImage image(file);
@@ -301,11 +308,28 @@ int main(int argc, char **argv)
         render_polylines(&p, polylines, QColor(255, 0, 0, 100));
     }
 
+    if (processTraceSlopes) {
+        timer.restart();
+        std::vector<Polyline> tmp;
+        int originalCount = 0;
+        int simplifiedCount = 0;
+        for (auto poly : polylines) {
+            originalCount += poly.size();
+            tmp.push_back(traceSlopes(poly));
+            simplifiedCount += tmp.back().size();
+        }
+        polylines = tmp;
+        qDebug(" - traced slopes in %.3fms, %d/%d points remaining",
+               timer.nsecsElapsed() / 1000000.0,
+               simplifiedCount,
+               originalCount);
+    }
+
     if (processSmooth && processSmoothBeforeReduce) {
         timer.restart();
         std::vector<Polyline> smoothedPolylines;
         for (auto poly : polylines) {
-            smoothedPolylines.push_back(smoothenPolyline(poly, smoothFactor, smoothIterations));
+            smoothedPolylines.push_back(smoothen(poly, smoothFactor, smoothIterations));
         }
         qDebug(" - smoothed %d polylines in %.3fms", (int) smoothedPolylines.size(), timer.nsecsElapsed() / 1000000.0);
         polylines = smoothedPolylines;
@@ -318,7 +342,7 @@ int main(int argc, char **argv)
         int simplifiedCount = 0;
         for (auto poly : polylines) {
             originalCount += poly.size();
-            simplifiedPolylines.push_back(simplifyPolyline(poly, reduceThreshold));
+            simplifiedPolylines.push_back(simplifyRDP(poly, reduceThreshold));
             simplifiedCount += simplifiedPolylines.back().size();
         }
         qDebug(" - simplified, %d->%d pts, (%f%%) in %.3fms",
@@ -333,7 +357,7 @@ int main(int argc, char **argv)
         timer.restart();
         std::vector<Polyline> smoothedPolylines;
         for (auto poly : polylines) {
-            smoothedPolylines.push_back(smoothenPolyline(poly, smoothFactor, smoothIterations));
+            smoothedPolylines.push_back(smoothen(poly, smoothFactor, smoothIterations));
         }
         qDebug(" - smoothed %d polylines in %.3fms", (int) smoothedPolylines.size(), timer.nsecsElapsed() / 1000000.0);
         polylines = smoothedPolylines;

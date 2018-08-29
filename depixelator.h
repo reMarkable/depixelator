@@ -45,7 +45,7 @@ struct IntPoint
     int x;
     int y;
 
-    IntPoint(int x = 0, int y = 0.0f) : x(x), y(y) { }
+    IntPoint(int x = 0, int y = 0) : x(x), y(y) { }
 };
 
 struct Bitmap
@@ -80,14 +80,22 @@ std::vector<Polyline> findContours(const Bitmap &bitmap);
  * Runs over the given polyline and returns a visually identical copy, but with superfluous
  * points removed.
  */
-Polyline simplifyPolyline(const Polyline &polyline, float threshold);
+Polyline simplify(const Polyline &polyline, float threshold);
+
+/*
+ * Performs a Ramer-Douglas-Peuker end-point fit algorithm.
+ */
+Polyline simplifyRDP(const Polyline &polyline, float epsilon);
+
+
+Polyline traceSlopes(const Polyline &polyline);
 
 /*
  * Runs over the points and nudges them to form a slightly less ragged polyline..
  */
-Polyline smoothenPolyline(const Polyline &polyline, float factor);
+Polyline smoothen(const Polyline &polyline, float factor);
 
-Polyline smoothenPolyline(const Polyline &polyline, float factor, int iterations);
+Polyline smoothen(const Polyline &polyline, float factor, int iterations);
 
 /*
  * Turn tne polyline into a continuous cubic bezier path.
@@ -243,7 +251,7 @@ inline std::vector<Polyline> findContours(const Bitmap &bitmap)
     return polylines;
 }
 
-Polyline simplifyPolyline(const Polyline &polyline, float threshold)
+inline Polyline simplify(const Polyline &polyline, float threshold)
 {
     if (polyline.size() < 2) {
         return polyline;
@@ -299,10 +307,69 @@ Polyline simplifyPolyline(const Polyline &polyline, float threshold)
         ++it;
     }
 
+    if (result.front().x != result.back().x
+        || result.front().y != result.back().y) {
+        result.push_back(result.front());
+    }
+
     return result;
 }
 
-Polyline smoothenPolyline(const Polyline &polyline, float factor)
+inline Polyline simplifyRDP(const Polyline &polyline, float epsilon)
+{
+    assert(epsilon >= 0.0f);
+
+    if (polyline.size() < 3)
+        return polyline;
+
+    std::vector<IntPoint> range;
+    range.push_back(IntPoint(0, polyline.size() - 1));
+
+    Polyline result;
+    result.push_back(polyline.front());
+
+    while (range.size() > 0) {
+        const int i0 = range.back().x;
+        const int i1 = range.back().y;
+        range.pop_back();
+
+        float maxDist = 0;
+        int imax = -1;
+        Point p0 = polyline[i0];
+        Point p1 = polyline[i1];
+        float sdx = p1.x - p0.x;
+        float sdy = p1.y - p0.y;
+        float sc = p1.x * p0.y - p1.y * p0.x;
+        float slen = std::sqrt(sdx * sdx + sdy * sdy);
+
+        for (int i=i0+1; i<i1-1; ++i) {
+            Point pt = polyline[i];
+            float dist;
+            if (slen == 0) {
+                float dx = pt.x - p0.x;
+                float dy = pt.y - p0.y;
+                dist = std::sqrt(dx * dx - dy * dy);
+            } else {
+                dist = std::abs(sdy * pt.x - sdx * pt.y + sc) / slen;
+            }
+            if (dist > maxDist) {
+                imax = i;
+                maxDist = dist;
+            }
+        }
+
+        if (maxDist > epsilon) {
+            range.push_back(IntPoint(i0, imax));
+            range.push_back(IntPoint(imax, i1));
+        } else {
+            result.push_back(p1);
+        }
+    }
+
+    return result;
+}
+
+inline Polyline smoothen(const Polyline &polyline, float factor)
 {
     if (polyline.size() < 4) {
         return polyline;
@@ -342,21 +409,21 @@ Polyline smoothenPolyline(const Polyline &polyline, float factor)
     return result;
 }
 
-Polyline smoothenPolyline(const Polyline &polyline, float factor, int iterations)
+inline Polyline smoothen(const Polyline &polyline, float factor, int iterations)
 {
     if (iterations < 1) {
         return polyline;
     }
 
-    Polyline result = smoothenPolyline(polyline, factor);
+    Polyline result = smoothen(polyline, factor);
     for (int i=1; i<iterations; ++i) {
-        result = smoothenPolyline(result, factor);
+        result = smoothen(result, factor);
     }
 
     return result;
 }
 
-Polyline convertToCubicPath(const Polyline &polyline)
+inline Polyline convertToCubicPath(const Polyline &polyline)
 {
     if (polyline.size() < 4) {
         return polyline;
@@ -393,6 +460,82 @@ Polyline convertToCubicPath(const Polyline &polyline)
             float len = std::sqrt(dx * dx + dy * dy) / 3;
             result.push_back(Point(cur.x + tx * len, cur.y + ty * len));
         }
+    }
+
+    return result;
+}
+
+/*
+
+ * The idea of slope tracing is to identify pixel-stpes that will visually
+ * look like line slopes.
+ *
+ * Since the data is coming from a marching squares, we know certain things
+ * about the input set that helps us. For instance, we'll always have
+ * +/-45 degree, horizontal or vertical slopes.
+ *
+ * A pixel slope like this will result in two separate segments each with
+ * abs(dx) == abs(dy) == 0.5, followed by a number of horizontal/vertical
+ * segments of one pixel, followed by another slope segment with identical
+ * (dx,dy) to what we started with.
+ *
+ *  Basically:    _______/   Becomes:          *
+ *               /                     *
+ *
+ * We do this by running over the points, and when we find a 45 slope, do a
+ * search forward from that point. We look for either all horizontal or
+ * all vertical and see if where we land at the end of that is another 45
+ * degree slope identical to the one we started at. If so, optimize away
+ * all points in between.
+
+ * If the polyline starts in the middle of a slope, we don't try to detect
+ * that currently. We could fix that by simply "rotating" the polyline a
+ * bit, since the polyline is a closed loop. Find a place where we're not
+ * on a slope, and start there instead.
+ */
+
+inline Polyline traceSlopes(const Polyline &polyline)
+{
+    if (polyline.size() < 5) {
+        return polyline;
+    }
+
+    Polyline result;
+
+    for (unsigned int i=0; i<polyline.size() - 1; ++i) {
+        Point cur = polyline[i];
+        Point next = polyline[i+1];
+        float dx = next.x - cur.x;
+        float dy = next.y - cur.y;
+
+        result.push_back(cur);
+
+        if (std::abs(dx) == 0.5 && std::abs(dy) == 0.5) {
+            // Found a 45 degree angle, search for
+            unsigned int j = i+2;
+
+            float ndx = polyline[j].x - next.x;
+            float ndy = polyline[j].y - next.y;
+
+            bool horizontal = ndy == 0;
+            bool vertical = ndx == 0;
+
+            // Follow the horizontal or vertical line
+            while (j < polyline.size()
+                   && ((horizontal && polyline[j].y == next.y)
+                       || (vertical && polyline[j].x == next.x))) {
+                ++j;
+            }
+
+            if (j < polyline.size()
+                && (polyline[j].x - polyline[j-1].x == dx)
+                && (polyline[j].y - polyline[j-1].y == dy)
+                && (horizontal || vertical)) {
+                // line segment found, simplify it..
+                i = j-1; // -1 due to the ++ in the for (..) up above
+            }
+        }
+
     }
 
     return result;
