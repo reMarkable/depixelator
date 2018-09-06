@@ -586,5 +586,15 @@ inline Polylines simplifyRDP(const Polylines &lines, float threshold)
     return out;
 }
 
+
+inline Polylines traceSlopes(const Polylines &lines)
+{
+    Polylines out;
+    for (auto in : lines) {
+        out.push_back(traceSlopes(in));
+    }
+    return out;
+}
+
 } // end of namespace depixelator
 
