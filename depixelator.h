@@ -519,7 +519,7 @@ inline Polyline traceSlopes(const Polyline &polyline)
 
         result.push_back(cur);
 
-        if (std::abs(dx) == 0.5 && std::abs(dy) == 0.5) {
+        if (std::abs(dx) == 0.5 && std::abs(dy) == 0.5 && i < polyline.size() - 2) {
             // Found a 45 degree angle, search for
             unsigned int j = i+2;
 
@@ -544,7 +544,6 @@ inline Polyline traceSlopes(const Polyline &polyline)
                 i = j-1; // -1 due to the ++ in the for (..) up above
             }
         }
-
     }
 
     return result;
