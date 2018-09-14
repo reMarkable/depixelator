@@ -357,7 +357,7 @@ inline Polyline simplifyRDP(const Polyline &polyline, float epsilon)
             if (slen == 0) {
                 float dx = pt.x - p0.x;
                 float dy = pt.y - p0.y;
-                dist = std::sqrt(dx * dx - dy * dy);
+                dist = std::sqrt(dx * dx + dy * dy);
             } else {
                 dist = std::abs(sdy * pt.x - sdx * pt.y + sc) / slen;
             }
