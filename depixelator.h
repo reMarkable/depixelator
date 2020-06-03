@@ -340,7 +340,7 @@ inline Polyline simplifyRDP(const Polyline &polyline, float epsilon)
         return polyline;
 
     std::vector<IntPoint> range;
-    range.push_back(IntPoint(0, polyline.size() - 1));
+    range.push_back(IntPoint(0, static_cast<int>(polyline.size()) - 1));
 
     Polyline result;
     result.push_back(polyline.front());
