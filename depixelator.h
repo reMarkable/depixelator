@@ -560,7 +560,7 @@ inline Polyline traceSlopes(const Polyline &polyline)
 inline Polylines smoothen(const Polylines &lines, float factor, int iterations)
 {
     Polylines out;
-    for (auto in : lines) {
+    for (const auto &in : lines) {
         out.push_back(smoothen(in, factor, iterations));
     }
     return out;
@@ -569,7 +569,7 @@ inline Polylines smoothen(const Polylines &lines, float factor, int iterations)
 inline Polylines convertToCubicPaths(const Polylines &lines)
 {
     Polylines out;
-    for (auto in : lines) {
+    for (const auto &in : lines) {
         out.push_back(convertToCubicPath(in));
     }
     return out;
@@ -578,7 +578,7 @@ inline Polylines convertToCubicPaths(const Polylines &lines)
 inline Polylines simplify(const Polylines &lines, float threshold)
 {
     Polylines out;
-    for (auto in : lines) {
+    for (const auto &in : lines) {
         out.push_back(simplify(in, threshold));
     }
     return out;
@@ -587,7 +587,7 @@ inline Polylines simplify(const Polylines &lines, float threshold)
 inline Polylines simplifyRDP(const Polylines &lines, float threshold)
 {
     Polylines out;
-    for (auto in : lines) {
+    for (const auto &in : lines) {
         out.push_back(simplifyRDP(in, threshold));
     }
     return out;
@@ -597,7 +597,7 @@ inline Polylines simplifyRDP(const Polylines &lines, float threshold)
 inline Polylines traceSlopes(const Polylines &lines)
 {
     Polylines out;
-    for (auto in : lines) {
+    for (const auto &in : lines) {
         out.push_back(traceSlopes(in));
     }
     return out;
