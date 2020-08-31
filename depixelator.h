@@ -207,6 +207,7 @@ inline Polylines findContours(const Bitmap &bitmap)
     // The algorithm guarantees a single line segment per point value, so
     // using a map is perfectly fine and helps us below, so we do that.
     std::unordered_map<IntPoint, IntPoint> segments;
+    segments.reserve( (xsteps * ysteps) / 3);
 
     for (int y=-1; y<=ysteps; ++y) {
         for (int x=-1; x<=xsteps; ++x) {
@@ -244,6 +245,7 @@ inline Polylines findContours(const Bitmap &bitmap)
 
     Polylines polylines;
     Polyline polyline;
+    polyline.reserve(segments.size());
 
     while (segments.size()) {
 
@@ -343,6 +345,7 @@ inline Polyline simplifyRDP(const Polyline &polyline, float epsilon)
     range.push_back(IntPoint(0, static_cast<int>(polyline.size()) - 1));
 
     Polyline result;
+    result.reserve(polyline.size() / 2);
     result.push_back(polyline.front());
 
     while (range.size() > 0) {
@@ -393,6 +396,7 @@ inline Polyline smoothen(const Polyline &polyline, float factor)
     }
 
     Polyline result;
+    result.reserve(polyline.size());
 
     for (unsigned int i=0; i<polyline.size(); ++i) {
         Point cur = polyline[i];
@@ -447,6 +451,7 @@ inline Polyline convertToCubicPath(const Polyline &polyline)
     }
 
     Polyline result;
+    result.reserve(polyline.size());
 
     for (unsigned int i=0; i<polyline.size(); ++i) {
         Point cur = polyline[i];
@@ -518,6 +523,7 @@ inline Polyline traceSlopes(const Polyline &polyline)
     }
 
     Polyline result;
+    result.reserve(polyline.size());
 
     for (unsigned int i=0; i<polyline.size() - 1; ++i) {
         Point cur = polyline[i];
@@ -560,6 +566,7 @@ inline Polyline traceSlopes(const Polyline &polyline)
 inline Polylines smoothen(const Polylines &lines, float factor, int iterations)
 {
     Polylines out;
+    out.reserve(lines.size());
     for (const auto &in : lines) {
         out.push_back(smoothen(in, factor, iterations));
     }
@@ -569,6 +576,7 @@ inline Polylines smoothen(const Polylines &lines, float factor, int iterations)
 inline Polylines convertToCubicPaths(const Polylines &lines)
 {
     Polylines out;
+    out.reserve(lines.size());
     for (const auto &in : lines) {
         out.push_back(convertToCubicPath(in));
     }
@@ -578,6 +586,7 @@ inline Polylines convertToCubicPaths(const Polylines &lines)
 inline Polylines simplify(const Polylines &lines, float threshold)
 {
     Polylines out;
+    out.reserve(lines.size());
     for (const auto &in : lines) {
         out.push_back(simplify(in, threshold));
     }
@@ -587,6 +596,7 @@ inline Polylines simplify(const Polylines &lines, float threshold)
 inline Polylines simplifyRDP(const Polylines &lines, float threshold)
 {
     Polylines out;
+    out.reserve(lines.size());
     for (const auto &in : lines) {
         out.push_back(simplifyRDP(in, threshold));
     }
@@ -597,6 +607,7 @@ inline Polylines simplifyRDP(const Polylines &lines, float threshold)
 inline Polylines traceSlopes(const Polylines &lines)
 {
     Polylines out;
+    out.reserve(lines.size());
     for (const auto &in : lines) {
         out.push_back(traceSlopes(in));
     }
