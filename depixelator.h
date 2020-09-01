@@ -451,7 +451,7 @@ inline Polyline convertToCubicPath(const Polyline &polyline)
     }
 
     Polyline result;
-    result.reserve(polyline.size());
+    result.reserve(polyline.size() * 3);
 
     for (unsigned int i=0; i<polyline.size(); ++i) {
         Point cur = polyline[i];
