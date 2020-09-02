@@ -245,7 +245,7 @@ inline Polylines findContours(const Bitmap &bitmap)
 
     Polylines polylines;
     Polyline polyline;
-    polyline.reserve(segments.size());
+    polyline.reserve(256);
 
     while (segments.size()) {
 
@@ -345,7 +345,7 @@ inline Polyline simplifyRDP(const Polyline &polyline, float epsilon)
     range.push_back(IntPoint(0, static_cast<int>(polyline.size()) - 1));
 
     Polyline result;
-    result.reserve(polyline.size() / 2);
+    result.reserve(polyline.size() / 10);
     result.push_back(polyline.front());
 
     while (range.size() > 0) {
@@ -523,7 +523,7 @@ inline Polyline traceSlopes(const Polyline &polyline)
     }
 
     Polyline result;
-    result.reserve(polyline.size());
+    result.reserve(polyline.size() / 10);
 
     for (unsigned int i=0; i<polyline.size() - 1; ++i) {
         Point cur = polyline[i];
