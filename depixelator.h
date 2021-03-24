@@ -76,8 +76,8 @@ struct Bitmap
     bool checkBit(int x, int y) const;
 };
 
-typedef std::vector<Point> Polyline;
-typedef std::vector<Polyline> Polylines;
+using Polyline = std::vector<Point>;
+using Polylines = std::vector<Polyline>;
 
 /*
  * Runs a Marching Squares algorithm over the bitmap and forms polylines out of the result.
