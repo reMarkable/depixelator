@@ -164,8 +164,9 @@ inline bool Bitmap::checkBit(int x, int y) const
 
 inline Polylines findContours(const Bitmap &bitmap)
 {
-    if (!bitmap.isValid())
+    if (!bitmap.isValid()) {
         return Polylines();
+    }
 
     int xsteps = bitmap.width - 1;
     int ysteps = bitmap.height - 1;
@@ -338,8 +339,9 @@ inline Polyline simplifyRDP(const Polyline &polyline, float epsilon)
 {
     assert(epsilon >= 0.0f);
 
-    if (polyline.size() < 3)
+    if (polyline.size() < 3) {
         return polyline;
+    }
 
     std::vector<IntPoint> range;
     range.push_back(IntPoint(0, static_cast<int>(polyline.size()) - 1));
