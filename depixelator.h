@@ -46,7 +46,7 @@ struct Point
     float x;
     float y;
 
-    Point(float x = 0.0f, float y = 0.0f) : x(x), y(y) { }
+    Point(float x_ = 0.0f, float y_ = 0.0f) : x(x_), y(y_) { }
 };
 
 struct IntPoint
@@ -54,7 +54,7 @@ struct IntPoint
     int x;
     int y;
 
-    IntPoint(int x = 0, int y = 0) : x(x), y(y) { }
+    IntPoint(int x_ = 0, int y_ = 0) : x(x_), y(y_) { }
 };
 
 struct Bitmap
