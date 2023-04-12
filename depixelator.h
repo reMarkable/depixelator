@@ -253,15 +253,15 @@ inline Polylines findContours(const Bitmap &bitmap)
         auto it = segments.begin();
         IntPoint pa = it->first;
         IntPoint pb = it->second;
-        polyline.push_back(Point(pa.x * invprec, pa.y * invprec));
-        polyline.push_back(Point(pb.x * invprec, pb.y * invprec));
+        polyline.push_back(Point(float(pa.x) * invprec, float(pa.y) * invprec));
+        polyline.push_back(Point(float(pb.x) * invprec, float(pb.y) * invprec));
         segments.erase(it);
         it = segments.find(pb);
 
         // append to the end of the line
         while (it != segments.end()) {
             pb = it->second;
-            polyline.push_back(Point(pb.x * invprec, pb.y * invprec));
+            polyline.push_back(Point(float(pb.x) * invprec, float(pb.y) * invprec));
             segments.erase(it);
             it = segments.find(pb);
         }
