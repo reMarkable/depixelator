@@ -132,7 +132,7 @@ Polylines convertToCubicPaths(const Polylines &lines);
 namespace std
 {
     template<> struct hash<depixelator::IntPoint> {
-        size_t operator()(const depixelator::IntPoint &p) const { return (p.x << 4) + p.y; }
+        int operator()(const depixelator::IntPoint &p) const { return (p.x << 4) + p.y; }
     };
     template<> struct equal_to<depixelator::IntPoint> {
         bool operator()(const depixelator::IntPoint &a, const depixelator::IntPoint &b) const { return a.x == b.x && a.y == b.y; }
@@ -159,7 +159,7 @@ inline bool Bitmap::checkBit(int x, int y) const
     if (x < 0 || y < 0  || x >= (int) width || y >= (int) height) {
         return false;
     }
-    return (data[y * stride + (x >> 3)] & (1<<(x&7))) != 0;
+    return (data[uint(y) * stride + uint(x >> 3)] & (1<<(x&7))) != 0;
 }
 
 inline Polylines findContours(const Bitmap &bitmap)
@@ -168,8 +168,8 @@ inline Polylines findContours(const Bitmap &bitmap)
         return Polylines();
     }
 
-    int xsteps = bitmap.width - 1;
-    int ysteps = bitmap.height - 1;
+    int xsteps = int(bitmap.width - 1);
+    int ysteps = int(bitmap.height - 1);
 
     const unsigned int lineCount[16] = {
         0, 1, 1, 1,
@@ -208,7 +208,7 @@ inline Polylines findContours(const Bitmap &bitmap)
     // The algorithm guarantees a single line segment per point value, so
     // using a map is perfectly fine and helps us below, so we do that.
     std::unordered_map<IntPoint, IntPoint> segments;
-    segments.reserve( (xsteps * ysteps) / 3);
+    segments.reserve(size_t((xsteps * ysteps) / 3));
 
     for (int y=-1; y<=ysteps; ++y) {
         for (int x=-1; x<=xsteps; ++x) {
@@ -357,15 +357,15 @@ inline Polyline simplifyRDP(const Polyline &polyline, float epsilon)
 
         float maxDist = 0;
         int imax = -1;
-        Point p0 = polyline[i0];
-        Point p1 = polyline[i1];
+        Point p0 = polyline[size_t(i0)];
+        Point p1 = polyline[size_t(i1)];
         float sdx = p1.x - p0.x;
         float sdy = p1.y - p0.y;
         float sc = p1.x * p0.y - p1.y * p0.x;
         float slen = std::sqrt(sdx * sdx + sdy * sdy);
 
         for (int i=i0+1; i<i1-1; ++i) {
-            Point pt = polyline[i];
+            Point pt = polyline[size_t(i)];
             float dist;
             if (slen == 0) {
                 float dx = pt.x - p0.x;
