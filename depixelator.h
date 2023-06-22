@@ -165,7 +165,7 @@ inline bool Bitmap::checkBit(int x, int y) const
 inline Polylines findContours(const Bitmap &bitmap)
 {
     if (!bitmap.isValid()) {
-        return Polylines();
+        return {};
     }
 
     int xsteps = int(bitmap.width - 1);
