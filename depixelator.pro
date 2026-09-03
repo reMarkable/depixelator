@@ -1,6 +1,8 @@
 TEMPLATE = app
 TARGET = depixelator
 
+INCLUDEPATH += include
+
 # Input
-HEADERS += depixelator.h
+HEADERS += include/depixelator/depixelator.h
 SOURCES += main.cpp

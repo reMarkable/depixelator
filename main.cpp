@@ -6,7 +6,7 @@
 #include <vector>
 #include <assert.h>
 
-#include "depixelator.h"
+#include <depixelator/depixelator.h>
 
 using namespace depixelator;
 
